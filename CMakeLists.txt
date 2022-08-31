@@ -6,8 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(sources
-  src/functions.h
-  src/functions.cpp
+  src/async_task_runner.h
+  src/command_line_args_handler.h
+  src/async_task_runner.cpp
+  src/command_line_args_handler.cpp
   src/main.cpp
 )
 
