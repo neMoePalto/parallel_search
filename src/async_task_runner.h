@@ -22,12 +22,10 @@ bool operator==(const substring& lhs, const substring& rhs) noexcept;
 
 
 struct search_result /*sequence*/ {
-  std::vector<A::substring> sequence;
-  bool                      continue_to_use_prev_sequence_str_num = false;
-  std::size_t               str_count = 0;
+  std::vector<substring> sequence;
+  std::size_t            str_count = 0;
+  bool                   range_includes_at_least_one_str = false;
 };
-
-using search_future = std::future<search_result>;
 
 
 class async_task_runner {
@@ -41,14 +39,14 @@ public:
                     const std::string& pattern);
 
   std::size_t calc_used_threads() const noexcept;
-  void run_tasks(std::size_t threads_count);
-  const std::vector<substring>& merge_results() noexcept;
+  void run_tasks(std::size_t threads_count, bool enable_prints);
+  const std::vector<substring>& merge_results(bool enable_prints) noexcept;
 
 private:
-  const std::string&            file_content_;
-  const std::string&            pattern_;
-  std::vector<A::search_future> futures_;
-  std::vector<A::substring>     summary_sequence_;
+  const std::string&                      file_content_;
+  const std::string&                      pattern_;
+  std::vector<std::future<search_result>> futures_;
+  std::vector<substring>                  summary_sequence_;
 };
 
 

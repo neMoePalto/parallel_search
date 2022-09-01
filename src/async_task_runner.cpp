@@ -32,11 +32,20 @@ search_result async_task_runner::search_by_pattern(const std::string& str,
     }
   }
 
-  A::search_result res;
+  search_result res;
 
   auto search_from = it; // TODO: it убрать, оставить только search_from
   boost::smatch what;
-  std::size_t str_num = search_range.begin() == str.begin() ? 1 : 0;
+
+  std::size_t str_num = 0;
+  if (search_range.begin() == str.begin() || it == search_range.begin()) {
+    str_num = 1;
+//  } else if (it < search_range.begin()) {
+//    str_num = 0;
+//  } else {
+//    str_num = 0;
+  }
+
   std::string::const_iterator substr_begin;
   while (boost::regex_search(search_from,
                              search_range.end(),
@@ -45,13 +54,11 @@ search_result async_task_runner::search_by_pattern(const std::string& str,
     if (what[0] == '\n') {
       ++str_num;
       substr_begin = what[0].begin();
+      res.range_includes_at_least_one_str = true;
     } else {
       if (what[0].end() > search_range.begin()) {
 //      std::cout << substr_num << " " << what[0].begin() - substr_begin - 1 << " " << what[0] << std::endl;
         res.sequence.push_back({str_num, static_cast<size_t>(what[0].begin() - substr_begin), what[0], what[0].end()});
-        if (it < search_range.begin() /*&& what[0].begin() < search_range.begin()*/) {
-          res.continue_to_use_prev_sequence_str_num = true;
-        }
       }
     }
     search_from = what[0].end();
@@ -101,19 +108,23 @@ std::size_t async_task_runner::calc_used_threads() const noexcept {
 }
 
 
-void async_task_runner::run_tasks(std::size_t used_threads) {
+void async_task_runner::run_tasks(std::size_t used_threads, bool enable_prints) {
   futures_.clear();
 
   std::size_t chunk_size = file_content_.size() / used_threads;
-
   for (unsigned i = 0; i < used_threads; ++i) {
     const auto it_begin = file_content_.cbegin() + i * chunk_size;
     const auto it_end = (i == used_threads - 1) ? file_content_.cend() : it_begin + chunk_size;
     boost::iterator_range<std::string::const_iterator> range{it_begin, it_end};
-    for (auto it = it_begin; it != it_end; ++it) {
-      std::cout << *it;
+
+    if (enable_prints) {
+      for (auto it = it_begin; it != it_end; ++it) {
+        std::cout << *it;
+      }
+      std::cout << std::endl;
+      std::cout << "------------------------------------- " /*<< i << ":"*/ << std::endl;
     }
-    std::cout << std::endl;
+
     auto fut = std::async(std::launch::async,
                           &async_task_runner::search_by_pattern,
                           this,
@@ -121,49 +132,44 @@ void async_task_runner::run_tasks(std::size_t used_threads) {
                           range,
                           pattern_);
     futures_.emplace_back(std::move(fut));
-    std::cout << "----Запустил поток " << i << ":" << std::endl;
   }
 }
 
 
-const std::vector<substring>& async_task_runner::merge_results() noexcept {
+const std::vector<substring>& async_task_runner::merge_results(bool enable_prints) noexcept {
   summary_sequence_.clear();
 
   std::size_t end_to_end_numbering = 0;
 
   for (auto& f : futures_) {
     auto seq = f.get();
-    std::cout << "-------------------------- seq = " << seq.sequence.size() << ", strings = " << seq.str_count
-              << " :" << std::endl;
 
-    for (const auto& s : seq.sequence) {
-      std::cout << s << std::endl;
+    if (enable_prints) {
+      std::cout << "-------------------------- seq = " << seq.sequence.size() << ", strings = " << seq.str_count
+                << " :" << std::endl;
+
+      for (const auto& s : seq.sequence) {
+        std::cout << s << "    ";
+      }
+      std::cout << std::endl;
     }
-    std::cout << std::endl;
-
-
-    auto prev_sequence_str_num = end_to_end_numbering;
-    std::cout << "prev_seq_str_num = " << prev_sequence_str_num << std::endl;
 
     for (auto& s : seq.sequence) {
-      if (seq.continue_to_use_prev_sequence_str_num) {
-        auto a = s.str_num;
-        s.str_num += prev_sequence_str_num;
-        std::cout << " 2. use_OWN_number, изм. его с " << a << " до " << s.str_num << std::endl;
-      }
+      auto a = s.str_num;
+      s.str_num += end_to_end_numbering;
+      std::cout << "     " << a << " -> " << s.str_num  << "   " << s.content << "       ";
     }
 
     boost::push_back(summary_sequence_,
-                     boost::iterator_range<std::vector<A::substring>::const_iterator>
+                     boost::iterator_range<std::vector<substring>::const_iterator>
                      {seq.sequence.cbegin(), seq.sequence.cend()});
 
     end_to_end_numbering += seq.str_count;
-//    if (//seq.continue_to_use_prev_sequence_str_num ||
-//        //(seq.sequence.empty() && seq.str_count > 0))
-//        seq.str_count > 1)
-    {
+    if (seq.range_includes_at_least_one_str) {
       --end_to_end_numbering;
-      std::cout << "      end_to_end_numbering = " << end_to_end_numbering << std::endl;
+    }
+    if (!seq.sequence.empty()) {
+      std::cout << "       end_to_end_num AFTER SUM = " << end_to_end_numbering << std::endl;
     }
   }
 
@@ -178,8 +184,9 @@ void print_results(const std::vector<substring>& res) noexcept {
   }
 
   if (res == std::vector<substring>{
-  {5, 5 }, {6, 6}, {7, 6}}
+//  {5, 5 }, {6, 6}, {7, 6}}
 //  {2, 5 }, {3, 6}, {4, 6}}
+  {4, 5 }, {5, 6}, {7, 6}}
       ) {
     std::cout << " SUCCESS\n";
   } else {
