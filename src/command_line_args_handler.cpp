@@ -7,6 +7,7 @@
 
 namespace A {
 
+
 command_line_args_handler::command_line_args_handler(std::string file_path,
                                                      std::string pattern)
   : pattern_{pattern} {

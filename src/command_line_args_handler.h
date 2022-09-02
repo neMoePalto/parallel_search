@@ -5,6 +5,7 @@
 
 namespace A {
 
+
 class command_line_args_handler {
 public:
   command_line_args_handler(std::string file_path, std::string pattern);

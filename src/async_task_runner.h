@@ -38,8 +38,8 @@ public:
                     const std::string& pattern);
 
   std::size_t calc_used_threads() const noexcept;
-  void run_tasks(std::size_t threads_count, bool enable_prints);
-  const std::vector<substring>& merge_results(bool enable_prints) noexcept;
+  void run_tasks(std::size_t threads_count);
+  const std::vector<substring>& merge_results() noexcept;
 
 private:
   const std::string&                      file_content_;

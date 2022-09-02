@@ -16,6 +16,7 @@ std::ostream& operator<<(std::ostream& os, const substring& s) {
 }
 
 
+// Для отладки:
 bool operator==(const substring& lhs, const substring& rhs) noexcept {
   return lhs.str_num == rhs.str_num &&
          lhs.pos     == rhs.pos;
@@ -68,7 +69,6 @@ search_result async_task_runner::search_by_pattern(const std::string& str,
         if (!search_after_new_line) {
           ++pos;
         }
-
         res.searched_subs.push_back({str_num, pos, what[0]});
       }
       it_from = what[0].end();
@@ -94,7 +94,7 @@ std::size_t async_task_runner::calc_used_threads() const noexcept {
 }
 
 
-void async_task_runner::run_tasks(std::size_t used_threads, bool enable_prints) {
+void async_task_runner::run_tasks(std::size_t used_threads) {
   futures_.clear();
 
   std::size_t chunk_size = file_content_.size() / used_threads;
@@ -102,14 +102,6 @@ void async_task_runner::run_tasks(std::size_t used_threads, bool enable_prints) 
     const auto it_begin = file_content_.cbegin() + i * chunk_size;
     const auto it_end = (i == used_threads - 1) ? file_content_.cend() : it_begin + chunk_size;
     boost::iterator_range<std::string::const_iterator> range{it_begin, it_end};
-
-    if (enable_prints) {
-      for (auto it = it_begin; it != it_end; ++it) {
-        std::cout << *it;
-      }
-      std::cout << std::endl;
-      std::cout << "------------------------------------- " /*<< i << ":"*/ << std::endl;
-    }
 
     auto fut = std::async(std::launch::async,
                           &async_task_runner::search_by_pattern,
@@ -122,27 +114,14 @@ void async_task_runner::run_tasks(std::size_t used_threads, bool enable_prints) 
 }
 
 
-const std::vector<substring>& async_task_runner::merge_results(bool enable_prints) noexcept {
+const std::vector<substring>& async_task_runner::merge_results() noexcept {
   summary_sequence_.clear();
-
   std::size_t end_to_end_numbering = 0;
+
   for (auto& f : futures_) {
     auto task_res = f.get();
-
-    if (enable_prints) {
-      std::cout << "-------------------------- seq = " << task_res.searched_subs.size() << ", strings = " << task_res.str_count
-                << " :" << std::endl;
-
-      for (const auto& s : task_res.searched_subs) {
-        std::cout << s << "    ";
-      }
-      std::cout << std::endl;
-    }
-
     for (auto& s : task_res.searched_subs) {
-      auto a = s.str_num;
       s.str_num += end_to_end_numbering;
-      std::cout << "     " << a << " -> " << s.str_num  << "      ";// << s.content << "       \n";
     }
 
     boost::push_back(summary_sequence_,
@@ -150,10 +129,6 @@ const std::vector<substring>& async_task_runner::merge_results(bool enable_print
                      {task_res.searched_subs.cbegin(), task_res.searched_subs.cend()});
 
     end_to_end_numbering += task_res.str_count;
-
-    if (!task_res.searched_subs.empty()) {
-      std::cout << "str_count = " << task_res.str_count << ", end_to_end_num AFTER SUM = " << end_to_end_numbering << std::endl;
-    }
   }
 
   return summary_sequence_;
