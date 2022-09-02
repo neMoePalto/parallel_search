@@ -22,7 +22,7 @@ bool operator==(const substring& lhs, const substring& rhs) noexcept {
 }
 
 
-sequence_info async_task_runner::search_by_pattern(const std::string& str,
+search_result async_task_runner::search_by_pattern(const std::string& str,
                                                    boost::iterator_range<std::string::const_iterator> search_range,
                                                    std::string pattern) const noexcept {
   auto it_from = search_range.begin();
@@ -32,14 +32,16 @@ sequence_info async_task_runner::search_by_pattern(const std::string& str,
         break;
       }
     }
-    ++it_from; // найденный символ '\n' оставляем другому обработчику
+    ++it_from; // Найденный символ '\n' оставляем другому обработчику
   }
 
-  sequence_info seq;
+  search_result res;
 
   if (it_from == search_range.end() + 1) {
-    std::cout << "====================================>[EMPTY STRING]" << std::endl;
-//    seq.range_includes_at_least_one_str = true;
+    // Потоку не досталось работы. Он проверил свой "кусок" str и не нашёл
+    // ни одной новой строки, чтобы корректно начать работу. Такая ситуация
+    // возникает, если маленький файл делится между большим количеством потоков.
+//    std::cout << "====================================>[NO DATA FOR THIS THREAD]" << std::endl;
   } else {
     auto it_till = search_range.end();
     for (; it_till != str.cend(); ++it_till) {
@@ -49,43 +51,38 @@ sequence_info async_task_runner::search_by_pattern(const std::string& str,
     }
 
     boost::smatch what;
-    std::size_t str_num = 1;
 
+    std::size_t str_num = 1;
+    bool search_after_new_line = false;
     std::string::const_iterator substr_begin = it_from;
     while (boost::regex_search(it_from,
                                it_till,
                                what,
                                boost::regex{pattern, boost::regex_constants::extended})) {
       if (what[0] == '\n') {
+        search_after_new_line = true;
         ++str_num;
         substr_begin = what[0].begin();
-        //      seq.range_includes_at_least_one_str = true;
       } else {
-        if (what[0].end() > search_range.begin()) {
-          //      std::cout << substr_num << " " << what[0].begin() - substr_begin - 1 << " " << what[0] << std::endl;
-          std::size_t pos = what[0].begin() - substr_begin;
-          if (substr_begin == it_from) {
-            ++pos;
-          }
-
-          seq.sequence.push_back({str_num, pos, what[0]});
+        std::size_t pos = what[0].begin() - substr_begin;
+        if (!search_after_new_line) {
+          ++pos;
         }
+
+        res.searched_subs.push_back({str_num, pos, what[0]});
       }
       it_from = what[0].end();
     }
 
-    seq.str_count = str_num;
-    if (search_range.end() == str.end()) {
-      --seq.str_count;
-    }
+    res.str_count = str_num;
   }
 
-  return seq;
+  return res;
 }
 
 
 async_task_runner::async_task_runner(const std::string& file_content,
-                                       const std::string& pattern)
+                                     const std::string& pattern)
   : file_content_(file_content)
   , pattern_(pattern) {
 }
@@ -93,29 +90,7 @@ async_task_runner::async_task_runner(const std::string& file_content,
 
 std::size_t async_task_runner::calc_used_threads() const noexcept {
   const std::size_t hw_threads = std::thread::hardware_concurrency();
-  const auto available_hw_threads = hw_threads != 0 ? hw_threads : 1;
-
-  std::size_t reasonable_threads = 0;
-  auto it_from = file_content_.cbegin();
-  while (reasonable_threads < available_hw_threads) {
-    auto it = std::find_if(it_from, file_content_.cend(), [](const auto& symb) {
-      return symb == '\n';
-    });
-    if (it != file_content_.cend()) {
-      ++reasonable_threads;
-      it_from = ++it;
-    } else {
-      break;
-    }
-  }
-
-  std::cout << "THREADS = " << reasonable_threads << std::endl;
-
-  // Для файлов, размер которых сопоставим с размером искомой подстроки, оставляем 1 поток:
-//  const auto reasonable_threads = std::max((file_content.size() / pattern_size) / 2, std::size_t{1});
-
-//  return std::min(reasonable_threads, available_hw_threads);
-  return reasonable_threads;
+  return hw_threads != 0 ? hw_threads : 1;
 }
 
 
@@ -152,19 +127,19 @@ const std::vector<substring>& async_task_runner::merge_results(bool enable_print
 
   std::size_t end_to_end_numbering = 0;
   for (auto& f : futures_) {
-    auto seq = f.get();
+    auto task_res = f.get();
 
     if (enable_prints) {
-      std::cout << "-------------------------- seq = " << seq.sequence.size() << ", strings = " << seq.str_count
+      std::cout << "-------------------------- seq = " << task_res.searched_subs.size() << ", strings = " << task_res.str_count
                 << " :" << std::endl;
 
-      for (const auto& s : seq.sequence) {
+      for (const auto& s : task_res.searched_subs) {
         std::cout << s << "    ";
       }
       std::cout << std::endl;
     }
 
-    for (auto& s : seq.sequence) {
+    for (auto& s : task_res.searched_subs) {
       auto a = s.str_num;
       s.str_num += end_to_end_numbering;
       std::cout << "     " << a << " -> " << s.str_num  << "      ";// << s.content << "       \n";
@@ -172,15 +147,12 @@ const std::vector<substring>& async_task_runner::merge_results(bool enable_print
 
     boost::push_back(summary_sequence_,
                      boost::iterator_range<std::vector<substring>::const_iterator>
-                     {seq.sequence.cbegin(), seq.sequence.cend()});
+                     {task_res.searched_subs.cbegin(), task_res.searched_subs.cend()});
 
-    end_to_end_numbering += seq.str_count;
-//    if (seq.range_includes_at_least_one_str) {
-//      --end_to_end_numbering;
-//    }
+    end_to_end_numbering += task_res.str_count;
 
-    if (!seq.sequence.empty()) {
-      std::cout << "str_count = " << seq.str_count << ", end_to_end_num AFTER SUM = " << end_to_end_numbering << std::endl;
+    if (!task_res.searched_subs.empty()) {
+      std::cout << "str_count = " << task_res.str_count << ", end_to_end_num AFTER SUM = " << end_to_end_numbering << std::endl;
     }
   }
 

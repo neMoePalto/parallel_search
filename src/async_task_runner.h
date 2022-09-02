@@ -9,6 +9,7 @@
 
 namespace A {
 
+
 struct substring {
   std::size_t str_num;
   std::size_t pos;
@@ -20,16 +21,15 @@ std::ostream& operator<<(std::ostream& os, const substring& s);
 bool operator==(const substring& lhs, const substring& rhs) noexcept;
 
 
-struct sequence_info /*sequence - хорошее имя*/ {
-  std::vector<substring> sequence;
+struct search_result {
+  std::vector<substring> searched_subs;
   std::size_t            str_count = 0;
-//  bool                   range_includes_at_least_one_str = false;
 };
 
 
 class async_task_runner {
 private:
-  sequence_info search_by_pattern(const std::string& str,
+  search_result search_by_pattern(const std::string& str,
                                   boost::iterator_range<std::string::const_iterator> search_range,
                                   std::string pattern) const noexcept;
 
@@ -44,7 +44,7 @@ public:
 private:
   const std::string&                      file_content_;
   const std::string&                      pattern_;
-  std::vector<std::future<sequence_info>> futures_;
+  std::vector<std::future<search_result>> futures_;
   std::vector<substring>                  summary_sequence_;
 };
 
