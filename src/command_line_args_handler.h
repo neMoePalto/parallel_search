@@ -15,6 +15,7 @@ public:
 
 private:
   void read_file(const std::string& path);
+  void replace(std::string& str, char elem, const std::string& substr) const noexcept;
 
 private:
   std::string file_content_;

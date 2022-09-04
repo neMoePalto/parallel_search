@@ -21,18 +21,10 @@ command_line_args_handler::command_line_args_handler(std::string file_path,
   }
 
   // Экранируем симоволы '.':
-  const std::string dot_as_text = "[.]";
-  std::size_t pos = 0;
-  while (pos < pattern_.size()) {
-    pos = pattern_.find('.', pos);
-    if (pos == std::string::npos) {
-      break;
-    }
-    pattern_.replace(pos, 1, dot_as_text);
-    pos = pos + dot_as_text.size();
-  }
+  replace(pattern_, '.', "[.]");
+  // Заменяем знак вопроса на выражение "любой символ, кроме \n":
+  replace(pattern_, '?', "[^\n]");
 
-  std::replace(pattern_.begin(), pattern_.end(), '?', '.');
   pattern_.append("|\n");
 
   try {
@@ -66,6 +58,19 @@ void command_line_args_handler::read_file(const std::string& path) {
     file_content_.append(buf, 0, stream.gcount());
   }
   file_content_.append(buf, 0, stream.gcount());
+}
+
+
+void command_line_args_handler::replace(std::string& str, char elem, const std::string& substr) const noexcept {
+  std::size_t pos = 0;
+  while (pos < str.size()) {
+    pos = str.find(elem, pos);
+    if (pos == std::string::npos) {
+      break;
+    }
+    str.replace(pos, 1, substr);
+    pos = pos + substr.size();
+  }
 }
 
 }
